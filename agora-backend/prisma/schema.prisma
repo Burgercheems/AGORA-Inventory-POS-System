@@ -17,6 +17,17 @@ model User {
   is_active     Boolean  @default(true)
   created_at    DateTime @default(now())
   updated_at    DateTime @updatedAt
+
+  refresh_tokens RefreshToken[]
+}
+
+model RefreshToken {
+  id         String   @id @default(uuid())
+  token      String   @unique
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expires_at DateTime
+  created_at DateTime @default(now())
 }
 
 enum Role {
