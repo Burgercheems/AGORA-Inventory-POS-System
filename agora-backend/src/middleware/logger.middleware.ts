@@ -1,0 +1,11 @@
+import { Request, Response, NextFunction } from 'express'
+
+export function requestLogger(req: Request, res: Response, next: NextFunction) {
+  const start = Date.now()
+  res.on('finish', () => {
+    const ms = Date.now() - start
+    const userId = (req as any).user?.userId || 'anon'
+    console.log(`[${new Date().toISOString()}] ${req.method} ${req.path} ${res.statusCode} ${ms}ms user:${userId}`)
+  })
+  next()
+}
