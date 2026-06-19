@@ -1,4 +1,18 @@
 {
+  "name": "agora-backend",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "prisma": {
+    "seed": "ts-node prisma/seed.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
     "@types/express": "^5.0.6",
@@ -9,10 +23,6 @@
     "ts-node": "^10.9.2",
     "typescript": "^6.0.3"
   },
-  "name": "agora-backend",
-  "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
   "dependencies": {
     "@prisma/client": "^5.22.0",
     "acorn": "^8.17.0",
@@ -118,12 +128,5 @@
     "which": "^2.0.2",
     "yn": "^3.1.1",
     "zeptomatch": "^2.1.0"
-  },
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "type": "commonjs"
+  }
 }
