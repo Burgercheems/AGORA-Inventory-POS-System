@@ -11,7 +11,7 @@ import ReportsPage from './pages/reports/ReportsPage'
 import AuditLogsPage from './pages/logs/AuditLogsPage'
 import UsersPage from './pages/users/UsersPage'
 import { Layout } from './components/Layout'
-import { Role } from './types'
+import type { Role } from './types'
 
 function ProtectedRoute({ children, roles }: { children: React.ReactNode, roles?: Role[] }) {
   const { user, token } = useAuthStore()
