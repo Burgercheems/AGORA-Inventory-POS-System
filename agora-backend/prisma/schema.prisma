@@ -8,6 +8,49 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
+// ─── ENUMS ───────────────────────────────────────────
+
+enum Role {
+  SUPER_ADMIN
+  ADMIN
+  MANAGER
+  CASHIER
+}
+
+enum ProductStatus {
+  ACTIVE
+  INACTIVE
+  OUT_OF_STOCK
+}
+
+enum MovementType {
+  STOCK_IN
+  STOCK_OUT
+  ADJUSTMENT
+}
+
+enum OrderStatus {
+  PENDING
+  COMPLETED
+  CANCELLED
+  REFUNDED
+}
+
+enum PaymentMethod {
+  CASH
+  CARD
+  GCASH
+  MAYA
+}
+
+enum TransactionStatus {
+  COMPLETED
+  REFUNDED
+  FAILED
+}
+
+// ─── MODELS ──────────────────────────────────────────
+
 model User {
   id            String   @id @default(uuid())
   name          String
@@ -18,37 +61,129 @@ model User {
   created_at    DateTime @default(now())
   updated_at    DateTime @updatedAt
 
-  refresh_tokens RefreshToken[]
+  refresh_tokens  RefreshToken[]
+  orders          Order[]
+  stock_movements StockMovement[]
 }
 
 model RefreshToken {
   id         String   @id @default(uuid())
   token      String   @unique
   userId     String
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   expires_at DateTime
   created_at DateTime @default(now())
-}
 
-enum Role {
-  SUPER_ADMIN
-  ADMIN
-  MANAGER
-  CASHIER
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Category {
-  id         String   @id @default(uuid())
-  name       String   @unique
-  created_at DateTime @default(now())
+  id          String    @id @default(uuid())
+  name        String    @unique
+  description String?
+  created_at  DateTime  @default(now())
+  updated_at  DateTime  @updatedAt
+
+  products Product[]
 }
 
 model Supplier {
-  id           String   @id @default(uuid())
+  id           String    @id @default(uuid())
   name         String
   contact_name String?
   email        String?
   phone        String?
   address      String?
-  created_at   DateTime @default(now())
+  created_at   DateTime  @default(now())
+  updated_at   DateTime  @updatedAt
+
+  products Product[]
+}
+
+model Product {
+  id          String        @id @default(uuid())
+  name        String
+  sku         String        @unique
+  barcode     String?       @unique
+  price       Decimal       @db.Decimal(10, 2)
+  status      ProductStatus @default(ACTIVE)
+  category_id String
+  supplier_id String?
+  created_at  DateTime      @default(now())
+  updated_at  DateTime      @updatedAt
+
+  category        Category        @relation(fields: [category_id], references: [id])
+  supplier        Supplier?       @relation(fields: [supplier_id], references: [id])
+  stock_level     StockLevel?
+  order_items     OrderItem[]
+  stock_movements StockMovement[]
+}
+
+model StockLevel {
+  id                  String   @id @default(uuid())
+  product_id          String   @unique
+  quantity            Int      @default(0)
+  low_stock_threshold Int      @default(10)
+  updated_at          DateTime @updatedAt
+
+  product Product @relation(fields: [product_id], references: [id])
+}
+
+model StockMovement {
+  id         String       @id @default(uuid())
+  product_id String
+  type       MovementType
+  quantity   Int
+  reason     String?
+  user_id    String
+  created_at DateTime     @default(now())
+
+  product Product @relation(fields: [product_id], references: [id])
+  user    User    @relation(fields: [user_id], references: [id])
+
+  @@index([product_id])
+  @@index([user_id])
+  @@index([created_at])
+}
+
+model Order {
+  id         String      @id @default(uuid())
+  cashier_id String
+  total      Decimal     @db.Decimal(10, 2)
+  discount   Decimal     @default(0) @db.Decimal(10, 2)
+  status     OrderStatus @default(PENDING)
+  created_at DateTime    @default(now())
+
+  cashier     User         @relation(fields: [cashier_id], references: [id])
+  items       OrderItem[]
+  transaction Transaction?
+
+  @@index([cashier_id])
+  @@index([status])
+  @@index([created_at])
+}
+
+model OrderItem {
+  id         String  @id @default(uuid())
+  order_id   String
+  product_id String
+  quantity   Int
+  unit_price Decimal @db.Decimal(10, 2)
+
+  order   Order   @relation(fields: [order_id], references: [id])
+  product Product @relation(fields: [product_id], references: [id])
+
+  @@index([order_id])
+  @@index([product_id])
+}
+
+model Transaction {
+  id             String            @id @default(uuid())
+  order_id       String            @unique
+  amount_paid    Decimal           @db.Decimal(10, 2)
+  payment_method PaymentMethod
+  change         Decimal           @db.Decimal(10, 2)
+  status         TransactionStatus @default(COMPLETED)
+  created_at     DateTime          @default(now())
+
+  order Order @relation(fields: [order_id], references: [id])
 }
