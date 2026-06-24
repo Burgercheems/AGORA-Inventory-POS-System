@@ -58,6 +58,9 @@ export default function UsersPage() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
+  // Only SUPER_ADMIN can see/assign the SUPER_ADMIN role
+  const availableRoles = ROLES.filter((r) => me?.role === 'SUPER_ADMIN' || r !== 'SUPER_ADMIN')
+
   const load = async () => {
     try {
       const res = await api.get('/users')
@@ -73,12 +76,15 @@ export default function UsersPage() {
 
   const openCreate = () => {
     setEditing(null)
+    // Default role to CASHIER; if current user is not SUPER_ADMIN, SUPER_ADMIN is not an option anyway
     setForm({ name: '', email: '', password: '', role: 'CASHIER' })
     setError('')
     setModalOpen(true)
   }
 
   const openEdit = (u: User) => {
+    // Only SUPER_ADMIN can edit another SUPER_ADMIN
+    if (u.role === 'SUPER_ADMIN' && me?.role !== 'SUPER_ADMIN') return
     setEditing(u)
     setForm({ name: u.name, email: u.email, password: '', role: u.role })
     setError('')
@@ -165,6 +171,10 @@ export default function UsersPage() {
               {users.map((u) => {
                 const rs = ROLE_STYLE[u.role]
                 const isMe = u.id === me?.id
+                const isSuperAdmin = u.role === 'SUPER_ADMIN'
+                const canEdit = !isSuperAdmin || me?.role === 'SUPER_ADMIN'
+                // Cannot deactivate yourself, and cannot deactivate a Super Admin unless you are one
+                const canToggle = !isMe && (!isSuperAdmin || me?.role === 'SUPER_ADMIN')
                 return (
                   <tr key={u.id} style={{ borderTop: '1px solid #334155' }}>
                     <td style={{ padding: '14px 20px', color: '#f1f5f9', fontSize: 13, fontWeight: 600 }}>
@@ -191,8 +201,10 @@ export default function UsersPage() {
                     </td>
                     <td style={{ padding: '14px 20px' }}>
                       <div style={{ display: 'flex', gap: 8 }}>
-                        <button onClick={() => openEdit(u)} style={{ ...btnGhost, padding: '6px 14px', fontSize: 12 }}>Edit</button>
-                        {!isMe && (
+                        {canEdit && (
+                          <button onClick={() => openEdit(u)} style={{ ...btnGhost, padding: '6px 14px', fontSize: 12 }}>Edit</button>
+                        )}
+                        {canToggle && (
                           <button
                             onClick={() => handleToggle(u)}
                             style={{ ...btnGhost, padding: '6px 14px', fontSize: 12, color: u.is_active ? '#f87171' : '#34d399', borderColor: u.is_active ? 'rgba(248,113,113,0.3)' : 'rgba(52,211,153,0.3)' }}
@@ -242,7 +254,7 @@ export default function UsersPage() {
               <div>
                 <label style={{ display: 'block', color: '#94a3b8', fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Role</label>
                 <select value={form.role} onChange={(e) => setForm((f) => ({ ...f, role: e.target.value as Role }))} style={inputStyle}>
-                  {ROLES.map((r) => <option key={r} value={r}>{r.replace('_', ' ')}</option>)}
+                  {availableRoles.map((r) => <option key={r} value={r}>{r.replace('_', ' ')}</option>)}
                 </select>
               </div>
 
