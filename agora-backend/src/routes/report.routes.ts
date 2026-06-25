@@ -1,15 +1,13 @@
 import { Router } from 'express'
-import { getStockLevels, getStockMovements, stockIn, stockOut } from '../controllers/stock.controller'
 import { protect } from '../middleware/auth.middleware'
 import { apiRateLimiter } from '../middleware/rateLimiter.middleware'
+import { allow } from '../middleware/rbac.middleware'
+import { getBillingReport } from '../controllers/report.controller'
 
 const router = Router()
 
 router.use(protect, apiRateLimiter)
 
-router.get('/levels', getStockLevels)
-router.get('/movements', getStockMovements)
-router.post('/in', stockIn)
-router.post('/out', stockOut)
+router.get('/billing', allow('ADMIN', 'SUPER_ADMIN', 'MANAGER'), getBillingReport)
 
 export default router

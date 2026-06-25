@@ -1,6 +1,6 @@
 import { Request, Response } from 'express'
 import prisma from '../utils/prisma'
-import { getCache, setCache, invalidateCache } from '../utils/redis'
+import { getCache, setCache, invalidateCache, invalidateCachePattern } from '../utils/redis'
 
 export async function stockIn(req: Request, res: Response) {
   try {
@@ -30,10 +30,8 @@ export async function stockIn(req: Request, res: Response) {
       return { movement, stockLevel }
     })
 
-    // invalidate stock cache
-    await invalidateCache('stock:levels')
+    await invalidateCachePattern('stock:levels:*')
 
-    // high stock alert
     const { quantity: newQty, high_stock_threshold } = result.stockLevel
     const isHighStock = newQty >= high_stock_threshold
 
@@ -43,18 +41,13 @@ export async function stockIn(req: Request, res: Response) {
       const alreadyAlerted = await getCache<boolean>(alertKey)
 
       if (!alreadyAlerted) {
-        await setCache(alertKey, true, 86400) // suppress for 24 hours
+        await setCache(alertKey, true, 86400)
         high_stock_alert = true
-        console.log(
-          `[HIGH STOCK] Product ${product_id} is at ${newQty} units (threshold: ${high_stock_threshold})`
-        )
+        console.log(`[HIGH STOCK] Product ${product_id} is at ${newQty} units (threshold: ${high_stock_threshold})`)
       }
     }
 
-    res.status(201).json({
-      ...result,
-      high_stock_alert,
-    })
+    res.status(201).json({ ...result, high_stock_alert })
   } catch (err) {
     res.status(500).json({ message: 'Failed to record stock in' })
   }
@@ -72,12 +65,8 @@ export async function stockOut(req: Request, res: Response) {
     const result = await prisma.$transaction(async (tx) => {
       const currentLevel = await tx.stockLevel.findUnique({ where: { product_id } })
 
-      if (!currentLevel) {
-        throw new Error('NO_STOCK_LEVEL')
-      }
-      if (currentLevel.quantity < quantity) {
-        throw new Error('INSUFFICIENT_STOCK')
-      }
+      if (!currentLevel) throw new Error('NO_STOCK_LEVEL')
+      if (currentLevel.quantity < quantity) throw new Error('INSUFFICIENT_STOCK')
 
       const movement = await tx.stockMovement.create({
         data: {
@@ -97,26 +86,20 @@ export async function stockOut(req: Request, res: Response) {
       return { movement, stockLevel }
     })
 
-    // invalidate stock cache
-    await invalidateCache('stock:levels')
+    await invalidateCachePattern('stock:levels:*')
 
-    const isLowStock = result.stockLevel.quantity <= result.stockLevel.low_stock_threshold
+    const { quantity: newQty, high_stock_threshold, low_stock_threshold } = result.stockLevel
+
+    const isLowStock = newQty <= low_stock_threshold
     if (isLowStock) {
-      console.log(
-        `[LOW STOCK] Product ${product_id} is at ${result.stockLevel.quantity} units (threshold: ${result.stockLevel.low_stock_threshold})`
-      )
+      console.log(`[LOW STOCK] Product ${product_id} is at ${newQty} units (threshold: ${low_stock_threshold})`)
     }
 
-    // clear high stock alert so it can re-trigger on next stockIn
-    const { quantity: newQty, high_stock_threshold } = result.stockLevel
     if (newQty < high_stock_threshold) {
       await invalidateCache(`alert:stock:${product_id}`)
     }
 
-    res.status(201).json({
-      ...result,
-      low_stock_warning: isLowStock,
-    })
+    res.status(201).json({ ...result, low_stock_warning: isLowStock })
   } catch (err: any) {
     if (err.message === 'INSUFFICIENT_STOCK') {
       return res.status(409).json({ message: 'Insufficient stock for this quantity' })
@@ -132,25 +115,38 @@ export async function getStockLevels(req: Request, res: Response) {
   try {
     const { page = 1, limit = 50, low_stock } = req.query
 
-    const where: any = {
-      product: { status: 'ACTIVE' },
-    }
+    const pageNum = Number(page)
+    const limitNum = Number(limit)
 
-    if (low_stock === 'true') {
-      where.quantity = { lte: prisma.stockLevel.fields.low_stock_threshold }
-    }
+    const cacheKey = `stock:levels:page=${pageNum}:limit=${limitNum}:low_stock=${low_stock ?? 'false'}`
 
-    const levels = await prisma.stockLevel.findMany({
-      where,
-      include: {
-        product: { select: { id: true, name: true, sku: true, status: true } },
-      },
-      orderBy: { product: { name: 'asc' } },
-      skip: (Number(page) - 1) * Number(limit),
-      take: Number(limit),
-    })
+    const cached = await getCache<any>(cacheKey)
+    if (cached) return res.json(cached)
 
-    res.json(levels)
+    const [levels, total] = await Promise.all([
+      prisma.stockLevel.findMany({
+        where: { product: { status: 'ACTIVE' } },
+        include: {
+          product: { select: { id: true, name: true, sku: true, status: true } },
+        },
+        orderBy: { product: { name: 'asc' } },
+        skip: (pageNum - 1) * limitNum,
+        take: limitNum,
+      }),
+      prisma.stockLevel.count({
+        where: { product: { status: 'ACTIVE' } },
+      }),
+    ])
+
+    const result = low_stock === 'true'
+      ? levels.filter((l) => l.quantity <= l.low_stock_threshold)
+      : levels
+
+    const response = { data: result, total, page: pageNum, limit: limitNum }
+
+    await setCache(cacheKey, response, 60)
+
+    res.json(response)
   } catch (err) {
     res.status(500).json({ message: 'Failed to fetch stock levels' })
   }

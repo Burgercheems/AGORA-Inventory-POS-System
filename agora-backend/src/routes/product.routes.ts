@@ -1,22 +1,16 @@
 import { Router } from 'express'
+import { getProducts, getProductById, createProduct, updateProduct, deleteProduct } from '../controllers/product.controller'
 import { protect } from '../middleware/auth.middleware'
-import { allow } from '../middleware/rbac.middleware'
-import { validate } from '../middleware/validate.middleware'
-import { createProductSchema, updateProductSchema } from '../schemas/product.schema'
-import {
-  getProducts,
-  getProductById,
-  createProduct,
-  updateProduct,
-  deleteProduct,
-} from '../controllers/product.controller'
+import { apiRateLimiter } from '../middleware/rateLimiter.middleware'
 
 const router = Router()
 
-router.get('/',       protect, getProducts)
-router.get('/:id',    protect, getProductById)
-router.post('/',      protect, allow('ADMIN', 'SUPER_ADMIN'), validate(createProductSchema), createProduct)
-router.put('/:id',    protect, allow('ADMIN', 'SUPER_ADMIN'), validate(updateProductSchema), updateProduct)
-router.delete('/:id', protect, allow('ADMIN', 'SUPER_ADMIN'), deleteProduct)
+router.use(protect, apiRateLimiter)
+
+router.get('/', getProducts)
+router.get('/:id', getProductById)
+router.post('/', createProduct)
+router.put('/:id', updateProduct)
+router.delete('/:id', deleteProduct)
 
 export default router

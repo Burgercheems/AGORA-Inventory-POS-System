@@ -1,37 +1,45 @@
 import { Request, Response } from 'express'
 import prisma from '../utils/prisma'
+import { getCache, setCache, invalidateCache, invalidateCachePattern } from '../utils/redis'
 
 export async function getProducts(req: Request, res: Response) {
   try {
     const { search, category_id, status, page = 1, limit = 20 } = req.query
 
-    const products = await prisma.product.findMany({
-      where: {
-        ...(search && { name: { contains: String(search), mode: 'insensitive' } }),
-        ...(category_id && { category_id: String(category_id) }),
-        ...(status && {
-  status: String(status).toUpperCase() as any,
-}),
-      },
-      include: {
-        category: true,
-        supplier: true,
-        stock_level: true,
-      },
-      skip: (Number(page) - 1) * Number(limit),
-      take: Number(limit),
-      orderBy: { name: 'asc' },
-    })
+    const pageNum = Number(page)
+    const limitNum = Number(limit)
 
-    const total = await prisma.product.count()
-    res.json({ data: products, total, page: Number(page), limit: Number(limit) })
+    // Unique cache key per query variation
+    const cacheKey = `products:list:page=${pageNum}:limit=${limitNum}:search=${search ?? ''}:category=${category_id ?? ''}:status=${status ?? ''}`
+
+    const cached = await getCache<any>(cacheKey)
+    if (cached) return res.json(cached)
+
+    const where = {
+      ...(search && { name: { contains: String(search), mode: 'insensitive' as const } }),
+      ...(category_id && { category_id: String(category_id) }),
+      ...(status && { status: String(status).toUpperCase() as any }),
+    }
+
+    const [products, total] = await Promise.all([
+      prisma.product.findMany({
+        where,
+        include: { category: true, supplier: true, stock_level: true },
+        skip: (pageNum - 1) * limitNum,
+        take: limitNum,
+        orderBy: { name: 'asc' },
+      }),
+      prisma.product.count({ where }),  // ✅ count now respects filters too
+    ])
+
+    const response = { data: products, total, page: pageNum, limit: limitNum }
+
+    await setCache(cacheKey, response, 60)
+
+    res.json(response)
   } catch (err) {
-  console.error(err)
-  res.status(500).json({
-    message: 'Failed to fetch products',
-    error: err,
-  })
-}
+    res.status(500).json({ message: 'Failed to fetch products' })
+  }
 }
 
 export async function getProductById(req: Request, res: Response) {
@@ -51,7 +59,6 @@ export async function getProductById(req: Request, res: Response) {
 export async function createProduct(req: Request, res: Response) {
   try {
     const { name, sku, barcode, price, category_id, supplier_id } = req.body
-
     const existing = await prisma.product.findUnique({ where: { sku } })
     if (existing) return res.status(409).json({ message: 'SKU already exists' })
 
@@ -62,6 +69,8 @@ export async function createProduct(req: Request, res: Response) {
     await prisma.stockLevel.create({
       data: { product_id: product.id, quantity: 0, low_stock_threshold: 10 },
     })
+
+    await invalidateCachePattern('products:list:*')
 
     res.status(201).json(product)
   } catch (err) {
@@ -78,6 +87,9 @@ export async function updateProduct(req: Request, res: Response) {
       where: { id },
       data: { name, sku, barcode, price, category_id, supplier_id, status },
     })
+
+    await invalidateCachePattern('products:list:*')
+
     res.json(product)
   } catch (err) {
     res.status(500).json({ message: 'Failed to update product' })
@@ -90,12 +102,14 @@ export async function deleteProduct(req: Request, res: Response) {
 
     const orderItems = await prisma.orderItem.count({ where: { product_id: id } })
     if (orderItems > 0) {
-      return res.status(409).json({ message: 'Cannot delete — product has existing orders' })
+      return res.status(409).json({ message: 'Cannot delete - product has existing orders' })
     }
 
     await prisma.stockLevel.deleteMany({ where: { product_id: id } })
     await prisma.stockMovement.deleteMany({ where: { product_id: id } })
     await prisma.product.delete({ where: { id } })
+
+    await invalidateCachePattern('products:list:*')
 
     res.json({ message: 'Product deleted' })
   } catch (err) {
