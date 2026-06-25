@@ -1,6 +1,6 @@
 import { Request, Response } from 'express'
 import prisma from '../utils/prisma'
-import { calculateDiscount } from '../services/order.service'
+import { calculateDiscount } from '../helpers/order.service'
 
 export async function createOrder(req: Request, res: Response) {
   try {

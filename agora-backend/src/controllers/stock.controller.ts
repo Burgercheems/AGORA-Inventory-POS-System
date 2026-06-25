@@ -1,5 +1,6 @@
 import { Request, Response } from 'express'
 import prisma from '../utils/prisma'
+import { getCache, setCache, invalidateCache } from '../utils/redis'
 
 export async function stockIn(req: Request, res: Response) {
   try {
@@ -29,7 +30,31 @@ export async function stockIn(req: Request, res: Response) {
       return { movement, stockLevel }
     })
 
-    res.status(201).json(result)
+    // invalidate stock cache
+    await invalidateCache('stock:levels')
+
+    // high stock alert
+    const { quantity: newQty, high_stock_threshold } = result.stockLevel
+    const isHighStock = newQty >= high_stock_threshold
+
+    let high_stock_alert = false
+    if (isHighStock) {
+      const alertKey = `alert:stock:${product_id}`
+      const alreadyAlerted = await getCache<boolean>(alertKey)
+
+      if (!alreadyAlerted) {
+        await setCache(alertKey, true, 86400) // suppress for 24 hours
+        high_stock_alert = true
+        console.log(
+          `[HIGH STOCK] Product ${product_id} is at ${newQty} units (threshold: ${high_stock_threshold})`
+        )
+      }
+    }
+
+    res.status(201).json({
+      ...result,
+      high_stock_alert,
+    })
   } catch (err) {
     res.status(500).json({ message: 'Failed to record stock in' })
   }
@@ -72,11 +97,20 @@ export async function stockOut(req: Request, res: Response) {
       return { movement, stockLevel }
     })
 
+    // invalidate stock cache
+    await invalidateCache('stock:levels')
+
     const isLowStock = result.stockLevel.quantity <= result.stockLevel.low_stock_threshold
     if (isLowStock) {
       console.log(
         `[LOW STOCK] Product ${product_id} is at ${result.stockLevel.quantity} units (threshold: ${result.stockLevel.low_stock_threshold})`
       )
+    }
+
+    // clear high stock alert so it can re-trigger on next stockIn
+    const { quantity: newQty, high_stock_threshold } = result.stockLevel
+    if (newQty < high_stock_threshold) {
+      await invalidateCache(`alert:stock:${product_id}`)
     }
 
     res.status(201).json({
@@ -99,10 +133,9 @@ export async function getStockLevels(req: Request, res: Response) {
     const { page = 1, limit = 50, low_stock } = req.query
 
     const where: any = {
-      product: { status: 'ACTIVE' }, // skip inactive products
+      product: { status: 'ACTIVE' },
     }
 
-    // If dashboard only needs low stock count, support ?low_stock=true
     if (low_stock === 'true') {
       where.quantity = { lte: prisma.stockLevel.fields.low_stock_threshold }
     }

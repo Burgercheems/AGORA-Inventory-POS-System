@@ -3,7 +3,83 @@ import bcrypt from 'bcryptjs'
 
 const prisma = new PrismaClient()
 
+const ROLES = ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'CASHIER'] as const
+
+const PERMISSIONS = [
+  'product:create', 'product:read', 'product:update', 'product:delete',
+  'category:manage', 'supplier:manage',
+  'stock:adjust', 'stock:read',
+  'order:create', 'order:read', 'order:refund', 'order:cancel',
+  'report:read', 'report:generate',
+  'user:manage', 'role:manage',
+] as const
+
+// Adjust this matrix to match your CEO's actual permission matrix doc.
+const ROLE_PERMISSIONS: Record<typeof ROLES[number], string[]> = {
+  SUPER_ADMIN: [...PERMISSIONS],
+  ADMIN: [
+    'product:create', 'product:read', 'product:update', 'product:delete',
+    'category:manage', 'supplier:manage',
+    'stock:adjust', 'stock:read',
+    'order:create', 'order:read', 'order:refund', 'order:cancel',
+    'report:read', 'report:generate',
+    'user:manage',
+  ],
+  MANAGER: [
+    'product:read', 'product:update',
+    'stock:adjust', 'stock:read',
+    'order:create', 'order:read', 'order:refund',
+    'report:read',
+  ],
+  CASHIER: [
+    'product:read',
+    'stock:read',
+    'order:create', 'order:read',
+  ],
+}
+
+async function seedRolesAndPermissions() {
+  const permissionRecords = await Promise.all(
+    PERMISSIONS.map((name) =>
+      prisma.permission.upsert({
+        where: { permission_name: name },
+        update: {},
+        create: { permission_name: name },
+      })
+    )
+  )
+  const permissionByName = new Map(permissionRecords.map((p) => [p.permission_name, p.id]))
+
+  const roleRecords = await Promise.all(
+    ROLES.map((name) =>
+      prisma.role.upsert({
+        where: { role_name: name },
+        update: {},
+        create: { role_name: name },
+      })
+    )
+  )
+  const roleByName = new Map(roleRecords.map((r) => [r.role_name, r.id]))
+
+  for (const roleName of ROLES) {
+    const roleId = roleByName.get(roleName)!
+    for (const permName of ROLE_PERMISSIONS[roleName]) {
+      const permissionId = permissionByName.get(permName)!
+      await prisma.rolePermission.upsert({
+        where: { role_id_permission_id: { role_id: roleId, permission_id: permissionId } },
+        update: {},
+        create: { role_id: roleId, permission_id: permissionId },
+      })
+    }
+  }
+
+  console.log('✅ Roles + Permissions seeded')
+  return roleByName
+}
+
 async function main() {
+  const roleByName = await seedRolesAndPermissions()
+
   // ─── Super Admin ───────────────────────────────────
   const hash = await bcrypt.hash('Admin@1234', 12)
   await prisma.user.upsert({
@@ -13,49 +89,51 @@ async function main() {
       name: 'Super Admin',
       email: 'admin@agora.com',
       password_hash: hash,
-      role: 'SUPER_ADMIN',
+      role_id: roleByName.get('SUPER_ADMIN')!,
     },
   })
   console.log('✅ Super Admin seeded')
-// ─── Admin ─────────────────────────────────────────
-const adminHash = await bcrypt.hash('Admin@1234', 12)
-await prisma.user.upsert({
-  where: { email: 'admin2@agora.com' },
-  update: {},
-  create: {
-    name: 'Store Admin',
-    email: 'admin2@agora.com',
-    password_hash: adminHash,
-    role: 'ADMIN',
-  },
-})
 
-// ─── Manager ───────────────────────────────────────
-const managerHash = await bcrypt.hash('Manager@1234', 12)
-await prisma.user.upsert({
-  where: { email: 'manager@agora.com' },
-  update: {},
-  create: {
-    name: 'Store Manager',
-    email: 'manager@agora.com',
-    password_hash: managerHash,
-    role: 'MANAGER',
-  },
-})
+  // ─── Admin ─────────────────────────────────────────
+  const adminHash = await bcrypt.hash('Admin@1234', 12)
+  await prisma.user.upsert({
+    where: { email: 'admin2@agora.com' },
+    update: {},
+    create: {
+      name: 'Store Admin',
+      email: 'admin2@agora.com',
+      password_hash: adminHash,
+      role_id: roleByName.get('ADMIN')!,
+    },
+  })
 
-// ─── Cashier ───────────────────────────────────────
-const cashierHash = await bcrypt.hash('Cashier@1234', 12)
-await prisma.user.upsert({
-  where: { email: 'cashier@agora.com' },
-  update: {},
-  create: {
-    name: 'Store Cashier',
-    email: 'cashier@agora.com',
-    password_hash: cashierHash,
-    role: 'CASHIER',
-  },
-})
-console.log('✅ Admin, Manager, Cashier seeded')
+  // ─── Manager ───────────────────────────────────────
+  const managerHash = await bcrypt.hash('Manager@1234', 12)
+  await prisma.user.upsert({
+    where: { email: 'manager@agora.com' },
+    update: {},
+    create: {
+      name: 'Store Manager',
+      email: 'manager@agora.com',
+      password_hash: managerHash,
+      role_id: roleByName.get('MANAGER')!,
+    },
+  })
+
+  // ─── Cashier ───────────────────────────────────────
+  const cashierHash = await bcrypt.hash('Cashier@1234', 12)
+  await prisma.user.upsert({
+    where: { email: 'cashier@agora.com' },
+    update: {},
+    create: {
+      name: 'Store Cashier',
+      email: 'cashier@agora.com',
+      password_hash: cashierHash,
+      role_id: roleByName.get('CASHIER')!,
+    },
+  })
+  console.log('✅ Admin, Manager, Cashier seeded')
+
   // ─── Categories ────────────────────────────────────
   const categoryNames = ['Beverages', 'Snacks', 'Dairy', 'Cleaning Supplies', 'Electronics']
   for (const name of categoryNames) {
@@ -120,17 +198,19 @@ console.log('✅ Admin, Manager, Cashier seeded')
     })
 
     await prisma.stockLevel.upsert({
-  where:  { product_id: product.id },
-  update: {             // ← now it will reset stock on reseed
-    quantity:            qty,
-    low_stock_threshold: threshold,
-  },
-  create: {
-    product_id:          product.id,
-    quantity:            qty,
-    low_stock_threshold: threshold,
-  },
-})
+      where:  { product_id: product.id },
+      update: {
+        quantity:             qty,
+        low_stock_threshold:  threshold,
+        high_stock_threshold: threshold * 5,
+      },
+      create: {
+        product_id:           product.id,
+        quantity:             qty,
+        low_stock_threshold:  threshold,
+        high_stock_threshold: threshold * 5,
+      },
+    })
   }
   console.log('✅ Products + Stock Levels seeded')
 }

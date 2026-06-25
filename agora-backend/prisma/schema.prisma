@@ -10,13 +10,6 @@ datasource db {
 
 // ─── ENUMS ───────────────────────────────────────────
 
-enum Role {
-  SUPER_ADMIN
-  ADMIN
-  MANAGER
-  CASHIER
-}
-
 enum ProductStatus {
   ACTIVE
   INACTIVE
@@ -49,6 +42,12 @@ enum TransactionStatus {
   FAILED
 }
 
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+}
+
 // ─── MODELS ──────────────────────────────────────────
 
 model User {
@@ -56,24 +55,47 @@ model User {
   name          String
   email         String   @unique
   password_hash String
-  role          Role     @default(CASHIER)
+  role_id       String
   is_active     Boolean  @default(true)
   created_at    DateTime @default(now())
   updated_at    DateTime @updatedAt
 
-  refresh_tokens  RefreshToken[]
+  role            Role            @relation(fields: [role_id], references: [id])
   orders          Order[]
   stock_movements StockMovement[]
+
+  @@index([role_id])
 }
 
-model RefreshToken {
-  id         String   @id @default(uuid())
-  token      String   @unique
-  userId     String
-  expires_at DateTime
-  created_at DateTime @default(now())
+model Role {
+  id          String   @id @default(uuid())
+  role_name   String   @unique // SUPER_ADMIN, ADMIN, MANAGER, CASHIER
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  users       User[]
+  permissions RolePermission[]
+}
+
+model Permission {
+  id              String   @id @default(uuid())
+  permission_name String   @unique // e.g. "product:create", "order:refund"
+  created_at      DateTime @default(now())
+
+  roles RolePermission[]
+}
+
+model RolePermission {
+  id            String @id @default(uuid())
+  role_id       String
+  permission_id String
+
+  role       Role       @relation(fields: [role_id], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permission_id], references: [id], onDelete: Cascade)
+
+  @@unique([role_id, permission_id])
+  @@index([role_id])
+  @@index([permission_id])
 }
 
 model Category {
@@ -119,11 +141,12 @@ model Product {
 }
 
 model StockLevel {
-  id                  String   @id @default(uuid())
-  product_id          String   @unique
-  quantity            Int      @default(0)
-  low_stock_threshold Int      @default(10)
-  updated_at          DateTime @updatedAt
+  id                   String   @id @default(uuid())
+  product_id           String   @unique
+  quantity             Int      @default(0)
+  low_stock_threshold  Int      @default(10)
+  high_stock_threshold Int      @default(100)
+  updated_at           DateTime @updatedAt
 
   product Product @relation(fields: [product_id], references: [id])
 }
@@ -186,4 +209,42 @@ model Transaction {
   created_at     DateTime          @default(now())
 
   order Order @relation(fields: [order_id], references: [id])
+}
+
+// ─── AUDIT TRAIL ─────────────────────────────────────
+// Generic log covering StockMovement, Product, and Order mutations.
+// entity_type holds the model name ("Product" | "StockMovement" | "Order"),
+// entity_id holds that record's id.
+
+model AuditLog {
+  id           String      @id @default(uuid())
+  entity_type  String
+  entity_id    String
+  action       AuditAction
+  performed_by String
+  old_value    Json?
+  new_value    Json?
+  created_at   DateTime    @default(now())
+
+  @@index([entity_type, entity_id])
+  @@index([performed_by])
+  @@index([created_at])
+}
+
+// ─── BILLING REPORT ──────────────────────────────────
+// ASSUMPTION (CEO spec not yet confirmed): aggregated daily summary.
+// Swap to per-transaction detail rows if CEO wants line-level billing instead.
+
+model BillingReport {
+  id                 String   @id @default(uuid())
+  report_date        DateTime @db.Date
+  total_sales        Decimal  @db.Decimal(10, 2)
+  total_discount     Decimal  @default(0) @db.Decimal(10, 2)
+  total_tax          Decimal  @default(0) @db.Decimal(10, 2)
+  total_transactions Int      @default(0)
+  generated_by       String?
+  created_at         DateTime @default(now())
+
+  @@unique([report_date])
+  @@index([report_date])
 }

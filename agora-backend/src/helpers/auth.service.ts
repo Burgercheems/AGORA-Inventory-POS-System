@@ -4,10 +4,18 @@ import { signAccessToken, signRefreshToken, verifyRefreshToken } from '../utils/
 
 const prisma = new PrismaClient()
 
-const REFRESH_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000 // 7 days
+// NOTE: RefreshToken table is gone, so refresh tokens are now stateless JWTs —
+// validity is checked by signature + expiry only, not against the DB.
+// This means logout can no longer truly revoke a token server-side; it only
+// clears the cookie client-side. If the CEO needs hard revocation (e.g. for
+// stolen-token scenarios), we'd need a lightweight denylist table (just
+// token-id + expiry, not full refresh token storage) — flag this if it matters.
 
 export async function loginUser(email: string, password: string) {
-  const user = await prisma.user.findUnique({ where: { email } })
+  const user = await prisma.user.findUnique({
+    where: { email },
+    include: { role: true },
+  })
 
   if (!user || !user.is_active) {
     throw new Error('Invalid credentials')
@@ -18,17 +26,9 @@ export async function loginUser(email: string, password: string) {
     throw new Error('Invalid credentials')
   }
 
-  const payload = { userId: user.id, role: user.role }
+  const payload = { userId: user.id, role: user.role.role_name }
   const accessToken = signAccessToken(payload)
   const refreshToken = signRefreshToken(payload)
-
-  await prisma.refreshToken.create({
-    data: {
-      token: refreshToken,
-      userId: user.id,
-      expires_at: new Date(Date.now() + REFRESH_TOKEN_TTL_MS),
-    },
-  })
 
   return {
     accessToken,
@@ -37,7 +37,7 @@ export async function loginUser(email: string, password: string) {
       id: user.id,
       name: user.name,
       email: user.email,
-      role: user.role,
+      role: user.role.role_name,
     },
   }
 }
@@ -50,36 +50,24 @@ export async function refreshUserToken(oldRefreshToken: string) {
     throw new Error('Invalid or expired refresh token')
   }
 
-  const storedToken = await prisma.refreshToken.findUnique({
-    where: { token: oldRefreshToken },
+  const user = await prisma.user.findUnique({
+    where: { id: payload.userId },
+    include: { role: true },
   })
-
-  if (!storedToken || storedToken.expires_at < new Date()) {
-    throw new Error('Refresh token not recognized or expired')
-  }
-
-  const user = await prisma.user.findUnique({ where: { id: payload.userId } })
   if (!user || !user.is_active) {
     throw new Error('User not found or inactive')
   }
 
-  await prisma.refreshToken.delete({ where: { id: storedToken.id } })
-
-  const newPayload = { userId: user.id, role: user.role }
+  const newPayload = { userId: user.id, role: user.role.role_name }
   const accessToken = signAccessToken(newPayload)
   const newRefreshToken = signRefreshToken(newPayload)
-
-  await prisma.refreshToken.create({
-    data: {
-      token: newRefreshToken,
-      userId: user.id,
-      expires_at: new Date(Date.now() + REFRESH_TOKEN_TTL_MS),
-    },
-  })
 
   return { accessToken, refreshToken: newRefreshToken }
 }
 
-export async function logoutUser(refreshToken: string) {
-  await prisma.refreshToken.deleteMany({ where: { token: refreshToken } })
+export async function logoutUser(_refreshToken: string) {
+  // Stateless tokens: nothing to delete server-side. Cookie clearing happens
+  // in the controller. This is a no-op placeholder in case a denylist gets
+  // added later.
+  return
 }
