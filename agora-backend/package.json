@@ -124,6 +124,7 @@
     "shebang-regex": "^3.0.0",
     "signal-exit": "^4.1.0",
     "simple-update-notifier": "^2.0.0",
+    "socket.io": "^4.8.3",
     "sqlstring": "^2.3.3",
     "std-env": "^3.10.0",
     "supports-color": "^5.5.0",

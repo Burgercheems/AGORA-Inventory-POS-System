@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { getProducts, getProductById, createProduct, updateProduct, deleteProduct } from '../controllers/product.controller'
+import { getProducts, getProductById, createProduct, updateProduct, deleteProduct, lookupProduct } from '../controllers/product.controller'
 import { protect } from '../middleware/auth.middleware'
 import { apiRateLimiter } from '../middleware/rateLimiter.middleware'
 
@@ -7,6 +7,7 @@ const router = Router()
 
 router.use(protect, apiRateLimiter)
 
+router.get('/lookup', lookupProduct)
 router.get('/', getProducts)
 router.get('/:id', getProductById)
 router.post('/', createProduct)

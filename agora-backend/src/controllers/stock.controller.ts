@@ -1,6 +1,7 @@
 import { Request, Response } from 'express'
 import prisma from '../utils/prisma'
 import { getCache, setCache, invalidateCache, invalidateCachePattern } from '../utils/redis'
+import { emitStockUpdate, emitLowStockAlert } from '../utils/socketEmitter'
 
 export async function stockIn(req: Request, res: Response) {
   try {
@@ -31,6 +32,12 @@ export async function stockIn(req: Request, res: Response) {
     })
 
     await invalidateCachePattern('stock:levels:*')
+// get product name for socket event
+const product = await prisma.product.findUnique({
+  where: { id: product_id },
+  select: { name: true },
+})
+emitStockUpdate(product_id, product?.name ?? product_id, result.stockLevel.quantity)
 
     const { quantity: newQty, high_stock_threshold } = result.stockLevel
     const isHighStock = newQty >= high_stock_threshold
@@ -87,11 +94,22 @@ export async function stockOut(req: Request, res: Response) {
     })
 
     await invalidateCachePattern('stock:levels:*')
-
+    const product = await prisma.product.findUnique({
+      where: { id: product_id },
+      select: { name: true },
+    })
     const { quantity: newQty, high_stock_threshold, low_stock_threshold } = result.stockLevel
+
+    emitStockUpdate(product_id, product?.name ?? product_id, newQty)
 
     const isLowStock = newQty <= low_stock_threshold
     if (isLowStock) {
+      emitLowStockAlert(
+        product_id,
+        product?.name ?? product_id,
+        newQty,
+        low_stock_threshold
+      )
       console.log(`[LOW STOCK] Product ${product_id} is at ${newQty} units (threshold: ${low_stock_threshold})`)
     }
 

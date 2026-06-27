@@ -116,3 +116,27 @@ export async function deleteProduct(req: Request, res: Response) {
     res.status(500).json({ message: 'Failed to delete product' })
   }
 }
+
+export async function lookupProduct(req: Request, res: Response) {
+  try {
+    const { qr } = req.query
+    if (!qr) return res.status(400).json({ message: 'qr query param is required' })
+
+    const product = await prisma.product.findFirst({
+      where: {
+        OR: [
+          { barcode: String(qr) },
+          { sku: String(qr) },
+        ],
+        status: 'ACTIVE',
+      },
+      include: { category: true, supplier: true, stock_level: true },
+    })
+
+    if (!product) return res.status(404).json({ message: 'Product not found' })
+
+    res.json({ data: product })
+  } catch (err) {
+    res.status(500).json({ message: 'Failed to lookup product' })
+  }
+}
