@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api from '../../services/api'
+import CameraScanner from '../../components/CameraScanner'
 
 interface Product {
   id: string
@@ -94,6 +95,7 @@ export default function OrdersPage() {
   const [historySearch, setHistorySearch] = useState('')
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
   const [showOrderDetail, setShowOrderDetail] = useState(false)
+  const [showScanner, setShowScanner] = useState(false)
 
   const { data: products = [] } = useQuery<Product[]>({
     queryKey: ['products', search],
@@ -262,22 +264,40 @@ export default function OrdersPage() {
               minHeight: 0,
             }}
           >
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search products by name or SKU…"
-              style={{
-                background: BG_CARD,
-                border: `1px solid ${BORDER}`,
-                borderRadius: 8,
-                padding: '10px 14px',
-                color: TEXT_PRIMARY,
-                fontSize: 13,
-                outline: 'none',
-                flexShrink: 0,
-              }}
-            />
+            <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+  <input
+    type="text"
+    value={search}
+    onChange={(e) => setSearch(e.target.value)}
+    placeholder="Search products by name or SKU…"
+    style={{
+      flex: 1,
+      background: BG_CARD,
+      border: `1px solid ${BORDER}`,
+      borderRadius: 8,
+      padding: '10px 14px',
+      color: TEXT_PRIMARY,
+      fontSize: 13,
+      outline: 'none',
+    }}
+  />
+  <button
+    onClick={() => setShowScanner(true)}
+    style={{
+      background: ACCENT_DIM,
+      border: `1px solid ${ACCENT}`,
+      borderRadius: 8,
+      padding: '10px 16px',
+      color: ACCENT,
+      fontSize: 13,
+      fontWeight: 700,
+      cursor: 'pointer',
+      flexShrink: 0,
+    }}
+  >
+    📷 Scan
+  </button>
+</div>
             <div
               style={{
                 flex: 1,
@@ -1127,6 +1147,17 @@ export default function OrdersPage() {
             </button>
           </div>
         </div>
+      )}
+
+      {/* ── Camera Scanner Modal ── */}       ← ADD HERE
+      {showScanner && (
+        <CameraScanner
+          onProductFound={(product) => {
+            addToCart(product)
+            setShowScanner(false)
+          }}
+          onClose={() => setShowScanner(false)}
+        />
       )}
     </div>
   )

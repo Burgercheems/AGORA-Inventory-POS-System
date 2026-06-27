@@ -13,6 +13,8 @@ import AuditLogsPage from './pages/logs/AuditLogsPage'
 import UsersPage from './pages/users/UsersPage'
 import { Layout } from './components/Layout'
 import type { Role } from './types'
+import StockAlertToast from './components/ui/StockAlertToast'
+import { useSocket } from './hooks/useSocket'
 
 function ProtectedRoute({ children, roles }: { children: React.ReactNode, roles?: Role[] }) {
   const { user, token, isInitializing } = useAuthStore()
@@ -26,6 +28,7 @@ function ProtectedRoute({ children, roles }: { children: React.ReactNode, roles?
 
 function SessionBootstrap({ children }: { children: React.ReactNode }) {
   const { setAuth, setInitializing } = useAuthStore()
+  useSocket()
 
   useEffect(() => {
     async function bootstrap() {
@@ -62,7 +65,9 @@ export default function App() {
           <Route path="/users" element={<ProtectedRoute roles={['ADMIN','SUPER_ADMIN']}><Layout><UsersPage /></Layout></ProtectedRoute>} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
+        <StockAlertToast />
       </SessionBootstrap>
     </BrowserRouter>
   )
 }
+
