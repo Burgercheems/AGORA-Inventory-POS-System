@@ -22,14 +22,11 @@ const BG_BASE    = '#0f172a'
 const BG_CARD    = '#1e293b'
 const BORDER     = '#334155'
 const TEXT_PRIMARY   = '#f1f5f9'
-const TEXT_SECONDARY = '#94a3b8'
 const TEXT_MUTED     = '#475569'
 const ACCENT     = '#f59e0b'
 const ACCENT_DIM = 'rgba(245,158,11,0.12)'
-const SUCCESS    = '#34d399'
-const SUCCESS_DIM= 'rgba(52,211,153,0.12)'
 const DANGER     = '#f87171'
-const DANGER_DIM = 'rgba(248,113,113,0.12)'
+
 
 import api from '../services/api'
 

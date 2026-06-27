@@ -6,12 +6,11 @@ const DANGER_DIM = 'rgba(248,113,113,0.12)'
 const ACCENT  = '#f59e0b'
 const ACCENT_DIM = 'rgba(245,158,11,0.12)'
 const BG_CARD = '#1e293b'
-const BORDER  = '#334155'
 const TEXT_PRIMARY   = '#f1f5f9'
 const TEXT_SECONDARY = '#94a3b8'
 const TEXT_MUTED     = '#475569'
 
-export default function StockAlertToast() {
+export default function Toast() {
   const { alerts, dismissAlert } = useStockStore()
 
   // auto-dismiss after 6 seconds

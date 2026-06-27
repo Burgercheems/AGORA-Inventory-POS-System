@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import React from 'react'
 import { useQuery } from '@tanstack/react-query'
 import api from '../../services/api'
 
@@ -42,7 +42,6 @@ interface Transaction {
 }
 
 export default function PaymentsPage() {
-  const [search, setSearch] = useState('')
 
   const { data: transactions = [], isLoading } = useQuery<Transaction[]>({
     queryKey: ['transactions'],

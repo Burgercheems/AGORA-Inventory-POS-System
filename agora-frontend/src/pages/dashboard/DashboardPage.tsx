@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
 } from 'recharts'
 import api from '../../services/api'
 import { useAuthStore } from '../../stores/useAuthStore'
@@ -75,7 +75,6 @@ export default function DashboardPage() {
   useEffect(() => {
     async function load() {
       try {
-        const today = new Date().toISOString().split('T')[0]
 
         const [todayOrdersRes, recentRes, stockRes, productsRes] = await Promise.all([
           api.get(`/orders?status=COMPLETED&limit=200`), // for stats + chart
