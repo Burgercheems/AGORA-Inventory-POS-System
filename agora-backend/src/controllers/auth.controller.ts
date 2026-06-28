@@ -4,8 +4,8 @@ import { loginUser, refreshUserToken, logoutUser } from '../helpers/auth.service
 const REFRESH_COOKIE_NAME = 'refreshToken'
 const REFRESH_COOKIE_OPTIONS = {
   httpOnly: true,
-  secure: process.env.NODE_ENV === 'production',
-  sameSite: 'strict' as const,
+  secure: true,
+  sameSite: 'none' as const,
   maxAge: 7 * 24 * 60 * 60 * 1000,
   path: '/api/auth',
 }
