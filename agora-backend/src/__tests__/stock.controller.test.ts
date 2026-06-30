@@ -17,6 +17,9 @@ jest.mock('../utils/prisma', () => ({
       findMany: jest.fn(),
       count: jest.fn(),
     },
+    product: {
+      findUnique: jest.fn().mockResolvedValue({ name: 'Test Product' }),
+    },
   },
 }))
 
@@ -25,6 +28,51 @@ jest.mock('../utils/redis', () => ({
   setCache: jest.fn(),
   invalidateCache: jest.fn(),
   invalidateCachePattern: jest.fn(),
+}))
+
+jest.mock('../utils/socketEmitter', () => ({
+  emitStockUpdate: jest.fn(),
+}))
+
+jest.mock('../utils/notificationService', () => ({
+  dispatchLowStockAlert: jest.fn().mockResolvedValue(undefined),
+}))
+
+
+jest.mock('../utils/prisma', () => ({
+  __esModule: true,
+  default: {
+    $transaction: jest.fn(),
+    stockLevel: {
+      findUnique: jest.fn(),
+      findMany: jest.fn(),
+      count: jest.fn(),
+      update: jest.fn(),
+    },
+    stockMovement: {
+      create: jest.fn(),
+      findMany: jest.fn(),
+      count: jest.fn(),
+    },
+    product: {
+      findUnique: jest.fn().mockResolvedValue({ name: 'Test Product' }),
+    },
+  },
+}))
+
+jest.mock('../utils/redis', () => ({
+  getCache: jest.fn(),
+  setCache: jest.fn(),
+  invalidateCache: jest.fn(),
+  invalidateCachePattern: jest.fn(),
+}))
+
+jest.mock('../utils/socketEmitter', () => ({
+  emitStockUpdate: jest.fn(),
+}))
+
+jest.mock('../utils/notificationService', () => ({
+  dispatchLowStockAlert: jest.fn().mockResolvedValue(undefined),
 }))
 
 function mockRes() {

@@ -36,6 +36,14 @@ jest.mock('../utils/redis', () => ({
   invalidateCachePattern: jest.fn(),
 }))
 
+jest.mock('../utils/notificationService', () => ({
+  dispatchLowStockAlert: jest.fn().mockResolvedValue(undefined),
+}))
+
+jest.mock('../utils/socketEmitter', () => ({
+  emitStockUpdate: jest.fn(),
+}))
+
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const redis = require('../utils/redis')
 

@@ -5,3 +5,4 @@ module.exports = {
   testMatch: ['**/__tests__/**/*.test.ts', '**/tests/**/*.test.ts'],
   clearMocks: true,  // ← was resetMocks: true
 }
+

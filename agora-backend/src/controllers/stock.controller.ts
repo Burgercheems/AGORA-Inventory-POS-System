@@ -33,12 +33,12 @@ export async function stockIn(req: Request, res: Response) {
     })
 
     await invalidateCachePattern('stock:levels:*')
-// get product name for socket event
-const product = await prisma.product.findUnique({
-  where: { id: product_id },
-  select: { name: true },
-})
-emitStockUpdate(product_id, product?.name ?? product_id, result.stockLevel.quantity)
+
+    const product = await prisma.product.findUnique({
+      where: { id: product_id },
+      select: { name: true },
+    })
+    emitStockUpdate(product_id, product?.name ?? product_id, result.stockLevel.quantity)
 
     const { quantity: newQty, high_stock_threshold } = result.stockLevel
     const isHighStock = newQty >= high_stock_threshold
@@ -57,6 +57,7 @@ emitStockUpdate(product_id, product?.name ?? product_id, result.stockLevel.quant
 
     res.status(201).json({ ...result, high_stock_alert })
   } catch (err) {
+    console.error('STOCKIN ERROR:', err)
     res.status(500).json({ message: 'Failed to record stock in' })
   }
 }
@@ -95,6 +96,7 @@ export async function stockOut(req: Request, res: Response) {
     })
 
     await invalidateCachePattern('stock:levels:*')
+
     const product = await prisma.product.findUnique({
       where: { id: product_id },
       select: { name: true },
@@ -105,13 +107,13 @@ export async function stockOut(req: Request, res: Response) {
 
     const isLowStock = newQty <= low_stock_threshold
     if (isLowStock) {
-  await dispatchLowStockAlert(
-    product_id,
-    product?.name ?? product_id,
-    newQty,
-    result.stockLevel.low_stock_threshold
-  )
-}
+      await dispatchLowStockAlert(
+        product_id,
+        product?.name ?? product_id,
+        newQty,
+        result.stockLevel.low_stock_threshold
+      )
+    }
 
     if (newQty < high_stock_threshold) {
       await invalidateCache(`alert:stock:${product_id}`)
@@ -119,6 +121,7 @@ export async function stockOut(req: Request, res: Response) {
 
     res.status(201).json({ ...result, low_stock_warning: isLowStock })
   } catch (err: any) {
+    console.error('STOCKOUT ERROR:', err)
     if (err.message === 'INSUFFICIENT_STOCK') {
       return res.status(409).json({ message: 'Insufficient stock for this quantity' })
     }
