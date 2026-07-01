@@ -57,3 +57,21 @@ export async function getTransactionByOrderId(req: Request, res: Response) {
     res.status(500).json({ message: 'Failed to fetch transaction' })
   }
 }
+
+export async function getAllTransactions(req: Request, res: Response) {
+  try {
+    const transactions = await prisma.transaction.findMany({
+      orderBy: { created_at: 'desc' },
+      include: {
+        order: {
+          include: {
+            cashier: { select: { name: true } },
+          },
+        },
+      },
+    })
+    res.json(transactions)
+  } catch (err) {
+    res.status(500).json({ message: 'Failed to fetch transactions' })
+  }
+}

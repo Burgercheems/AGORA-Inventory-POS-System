@@ -52,7 +52,7 @@ export default function PaymentsPage() {
   })
 
   const totalRevenue = transactions
-    .filter((t) => t.status === 'paid' || t.status === 'PAID')
+    .filter((t) => t.status === 'COMPLETED')
     .reduce((s, t) => s + Number(t.amount_paid), 0)
 
   const todayCount = transactions.filter(
@@ -61,8 +61,8 @@ export default function PaymentsPage() {
 
   const statusColor = (status: string) => {
     const s = status.toLowerCase()
-    if (s === 'paid') return { bg: SUCCESS_DIM, color: SUCCESS }
-    if (s === 'unpaid') return { bg: DANGER_DIM, color: DANGER }
+    if (s === 'completed') return { bg: SUCCESS_DIM, color: SUCCESS }
+    if (s === 'failed' || s === 'unpaid') return { bg: DANGER_DIM, color: DANGER }
     if (s === 'voided' || s === 'cancelled') return { bg: 'rgba(100,116,139,0.15)', color: TEXT_SECONDARY }
     return { bg: ACCENT_DIM, color: ACCENT }
   }
