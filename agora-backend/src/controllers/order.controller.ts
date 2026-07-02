@@ -15,66 +15,84 @@ export async function createOrder(req: Request, res: Response) {
       ? (String(discount_type).toUpperCase() as 'FLAT' | 'PERCENTAGE')
       : undefined
 
-    const orderId = await prisma.$transaction(async (tx) => {
-      let subtotal = 0
-      const orderItemsData: { product_id: string; quantity: number; unit_price: number }[] = []
+    const orderId = await prisma.$transaction(
+      async (tx) => {
+        const productIds = items.map((i: any) => i.product_id)
 
-      for (const item of items) {
-        const product = await tx.product.findUnique({ where: { id: item.product_id } })
-        if (!product) throw new Error(`PRODUCT_NOT_FOUND:${item.product_id}`)
+        // Batch both lookups instead of querying per item in a loop
+        const [products, stockLevels] = await Promise.all([
+          tx.product.findMany({ where: { id: { in: productIds } } }),
+          tx.stockLevel.findMany({ where: { product_id: { in: productIds } } }),
+        ])
 
-        const stockLevel = await tx.stockLevel.findUnique({ where: { product_id: item.product_id } })
-        if (!stockLevel || stockLevel.quantity < item.quantity) {
-          throw new Error(`INSUFFICIENT_STOCK:${item.product_id}`)
+        const productMap = new Map(products.map((p) => [p.id, p]))
+        const stockMap = new Map(stockLevels.map((s) => [s.product_id, s]))
+
+        let subtotal = 0
+        const orderItemsData: { product_id: string; quantity: number; unit_price: number }[] = []
+
+        for (const item of items) {
+          const product = productMap.get(item.product_id)
+          if (!product) throw new Error(`PRODUCT_NOT_FOUND:${item.product_id}`)
+
+          const stockLevel = stockMap.get(item.product_id)
+          if (!stockLevel || stockLevel.quantity < item.quantity) {
+            throw new Error(`INSUFFICIENT_STOCK:${item.product_id}`)
+          }
+
+          const unitPrice = Number(product.price)
+          subtotal += unitPrice * item.quantity
+          orderItemsData.push({ product_id: item.product_id, quantity: item.quantity, unit_price: unitPrice })
         }
 
-        const unitPrice = Number(product.price)
-        subtotal += unitPrice * item.quantity
-        orderItemsData.push({ product_id: item.product_id, quantity: item.quantity, unit_price: unitPrice })
-      }
+        const discount = calculateDiscount(subtotal, normalisedDiscountType, discount_value)
+        const total = subtotal - discount
 
-      const discount = calculateDiscount(subtotal, normalisedDiscountType, discount_value)
-      const total = subtotal - discount
-
-      const order = await tx.order.create({
-        data: {
-          cashier_id: user.userId,
-          total,
-          discount,
-          status: 'COMPLETED',
-          items: { create: orderItemsData },
-        },
-      })
-
-      const paid = Number(amount_paid ?? total)
-      await tx.transaction.create({
-        data: {
-          order_id: order.id,
-          amount_paid: paid,
-          change: paid - total,
-          payment_method: String(payment_method).toUpperCase() as any,
-          status: 'COMPLETED',
-        },
-      })
-
-      for (const item of orderItemsData) {
-        await tx.stockMovement.create({
+        const order = await tx.order.create({
           data: {
+            cashier_id: user.userId,
+            total,
+            discount,
+            status: 'COMPLETED',
+            items: { create: orderItemsData },
+          },
+        })
+
+        const paid = Number(amount_paid ?? total)
+        await tx.transaction.create({
+          data: {
+            order_id: order.id,
+            amount_paid: paid,
+            change: paid - total,
+            payment_method: String(payment_method).toUpperCase() as any,
+            status: 'COMPLETED',
+          },
+        })
+
+        // Batch-create stock movement records in a single write
+        await tx.stockMovement.createMany({
+          data: orderItemsData.map((item) => ({
             product_id: item.product_id,
             type: 'STOCK_OUT',
             quantity: item.quantity,
             reason: `Order ${order.id}`,
             user_id: user.userId,
-          },
+          })),
         })
-        await tx.stockLevel.update({
-          where: { product_id: item.product_id },
-          data: { quantity: { decrement: item.quantity } },
-        })
-      }
 
-      return order.id
-    })
+        // Prisma has no batch "decrement per row" primitive, so this loop stays,
+        // but it's now the only remaining per-item loop (down from 3)
+        for (const item of orderItemsData) {
+          await tx.stockLevel.update({
+            where: { product_id: item.product_id },
+            data: { quantity: { decrement: item.quantity } },
+          })
+        }
+
+        return order.id
+      },
+      { timeout: 15000, maxWait: 5000 } // raised from Prisma's 5000ms default
+    )
 
     const fullOrder = await prisma.order.findUnique({
       where: { id: orderId },
