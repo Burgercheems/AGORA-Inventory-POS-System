@@ -105,11 +105,15 @@ export async function deleteProduct(req: Request, res: Response) {
       return res.status(409).json({ message: 'Cannot delete - product has existing orders' })
     }
 
+    const stockMovements = await prisma.stockMovement.count({ where: { product_id: id } })
+    if (stockMovements > 0) {
+      return res.status(409).json({ message: 'Cannot delete - product has stock movement history' })
+    }
+
     await prisma.stockLevel.deleteMany({ where: { product_id: id } })
-    await prisma.stockMovement.deleteMany({ where: { product_id: id } })
     await prisma.product.delete({ where: { id } })
 
-    await invalidateCachePattern('products:list:*')
+    await invalidateCache('products:list')
 
     res.json({ message: 'Product deleted' })
   } catch (err) {

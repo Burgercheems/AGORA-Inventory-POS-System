@@ -231,6 +231,8 @@ model Transaction {
   order Order @relation(fields: [order_id], references: [id], onDelete: Restrict)
 
   created_at DateTime @default(now())
+
+  @@index([created_at])
 }
 
 // ─── AUDIT TRAIL ─────────────────────────────────────
